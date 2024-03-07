@@ -1,14 +1,18 @@
 from rest_framework import generics
-from .serializers import TransactionSerializer
 from rest_framework.generics import RetrieveAPIView
-from .models import Transaction
-from .serializers import BalanceSerializer
-from decimal import Decimal, DecimalException
 from rest_framework.response import Response
 from rest_framework import status
+from .serializers import TransactionSerializer, BalanceSerializer
+from .models import Transaction
+from decimal import Decimal, DecimalException
 import requests
 
 def get_exchange_rate():
+    """
+    Fetches the current Bitcoin to Euro exchange rate from an external API.
+    Returns:
+        float: The Bitcoin to Euro exchange rate, or None if fetching failed.
+    """
     try:
         response = requests.get("http://api-cryptopia.adca.sh/v1/prices/ticker")
         data = response.json()
@@ -23,9 +27,21 @@ def get_exchange_rate():
         return None
 
 class WalletBalance(RetrieveAPIView):
+    """
+    Retrieves the current balance of the wallet.
+    Returns the balance in both Bitcoin and Euro.
+    Attributes:
+        serializer_class (BalanceSerializer): The serializer class for balance data.
+    """
+
     serializer_class = BalanceSerializer
 
     def get_object(self):
+        """
+        Retrieves the balance data.
+        Returns:
+            dict: A dictionary containing the Bitcoin balance and Euro balance.
+        """
         unspent_transactions = Transaction.objects.filter(spent=False)
         btc_balance = sum(transaction.amount for transaction in unspent_transactions)
         bitcoin_to_eur_rate = get_exchange_rate()
@@ -36,17 +52,36 @@ class WalletBalance(RetrieveAPIView):
         else:
             return {'error': 'Failed to fetch exchange rate'}
 
-
 class WalletTransactoin(generics.ListCreateAPIView):
+    """
+    Handles listing and creating transactions.
+    Attributes:
+        queryset: The queryset for Transaction objects.
+        serializer_class (TransactionSerializer): The serializer class for transactions.
+    """
     queryset = Transaction.objects.all()
     serializer_class = TransactionSerializer
 
 
 class WalletTransactionUpdate(generics.UpdateAPIView):
+    """
+    Handles updating transactions.
+    Updates the transactions based on the provided transfer amount.
+    Attributes:
+        queryset: The queryset for Transaction objects.
+        serializer_class (TransactionSerializer): The serializer class for transactions.
+    """
     queryset = Transaction.objects.all()
     serializer_class = TransactionSerializer
 
     def update(self, request, *args, **kwargs):
+        """
+        Updates transactions based on the provided transfer amount.
+        Checks if there is enough unspent balance for the transfer,
+        updates transactions accordingly, and returns the updated transactions.
+        Returns:
+            Response: The response containing the updated transactions.
+        """
         unspent_transactions = Transaction.objects.filter(spent=False)
         transfer_amount_str = request.data.get('amount')
         print(transfer_amount_str)
